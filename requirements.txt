@@ -10,7 +10,6 @@ itsdangerous>=2.1
 
 # --- Collectors ---
 requests>=2.31
-telethon>=1.34            # Telegram (public channels via MTProto)
 feedparser>=6.0           # RSS
 beautifulsoup4>=4.12      # website scraping / change detection
 google-play-scraper>=1.2  # Google Play reviews & ratings

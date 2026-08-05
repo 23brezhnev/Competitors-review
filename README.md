@@ -15,10 +15,11 @@ Google Play. Собирает активность, суммаризирует �
 
 - **Админка/бэкенд:** FastAPI + SQLAdmin (авто-CRUD, простой вход по таблице `users`)
 - **БД:** PostgreSQL (Supabase) в проде, SQLite для локальной разработки
-- **Сбор:** VK API, Telethon, feedparser/BeautifulSoup, google-play-scraper, Apple RSS
+- **Сбор:** VK API, `t.me/s` (без ключей), feedparser/BeautifulSoup,
+  google-play-scraper, Apple RSS + Lookup API
 - **LLM:** DeepSeek (OpenAI-совместимый API)
-- **Доставка:** Telegram Bot API
-- **Расписание:** cron (раз в неделю)
+- **Доставка:** Telegram Bot API, у каждого продукта свой бот
+- **Хостинг:** админка на Vercel, недельная задача в GitHub Actions
 
 ## Быстрый старт (локально)
 
@@ -63,13 +64,12 @@ Cron (по понедельникам в 9:00):
 | `DATABASE_URL` | Supabase Postgres (или SQLite локально) |
 | `SECRET_KEY` | сессии админки |
 | `VK_SERVICE_TOKEN` | dev.vk.com → сервисный ключ |
-| `TG_API_ID`, `TG_API_HASH` | my.telegram.org → чтение каналов |
-| `TG_BOT_TOKEN`, `TG_CHAT_ID` | @BotFather → отправка отчёта |
+| `TG_BOT_TOKEN`, `TG_CHAT_ID` | @BotFather → отправка отчёта (общий бот по умолчанию) |
 | `DEEPSEEK_API_KEY` | platform.deepseek.com |
 
-> Telethon при первом запуске попросит код из Telegram и создаст файл сессии
-> (`tg_session.session`). Сделайте это один раз локально, затем скопируйте файл
-> на сервер.
+> Для **чтения** Telegram-каналов ключи не нужны: публичные каналы читаются
+> через веб-превью `t.me/s/<канал>`. Токен бота нужен только чтобы **отправить**
+> готовый отчёт.
 
 ## База данных (Supabase)
 
@@ -91,7 +91,54 @@ Supabase показывает строку как `postgresql://` — замен
 Схема уже существует, поэтому `Base.metadata.create_all()` в `app/main.py`
 ничего не пересоздаёт.
 
-## Деплой на VPS
+## Деплой: Vercel (админка) + GitHub Actions (отчёты)
+
+Почему так: сбор данных ходит по всем источникам и вызывает LLM — это минуты, а
+serverless-функция Vercel на Hobby-плане умирает через 60 секунд. Actions даёт
+30 минут и логи каждого запуска. Админка же — обычные короткие HTTP-запросы,
+для неё serverless подходит.
+
+### 1. Админка на Vercel
+
+Импортируйте репозиторий на [vercel.com/new](https://vercel.com/new). Конфиг
+(`vercel.json`, `api/index.py`) уже в проекте, настраивать сборку не нужно.
+
+В **Settings → Environment Variables** добавьте:
+
+| Переменная | Значение |
+|---|---|
+| `DATABASE_URL` | строка подключения Supabase (см. выше, префикс `postgresql+psycopg2://`) |
+| `SECRET_KEY` | длинная случайная строка для сессий |
+
+Обязательно берите **Connection pooling** строку (порт `6543`), а не прямую
+(5432): serverless открывает соединение на каждый вызов и быстро исчерпает
+лимит Postgres. Код это учитывает — при переменной `VERCEL` пул отключается
+(`NullPool`).
+
+Создать первого пользователя админки (Vercel не даёт shell — запустите локально
+с тем же `DATABASE_URL`):
+
+```bash
+DATABASE_URL='<строка от Supabase>' python -m scripts.create_user you@example.com 'пароль'
+```
+
+### 2. Отчёты в GitHub Actions
+
+Workflow лежит в `.github/workflows/weekly-report.yml`: понедельник, 06:00 UTC
+(09:00 МСК), плюс кнопка ручного запуска.
+
+В **Settings → Secrets and variables → Actions** добавьте секреты:
+
+`DATABASE_URL`, `DEEPSEEK_API_KEY`, `VK_SERVICE_TOKEN`, `TG_BOT_TOKEN`,
+`TG_CHAT_ID`
+
+Здесь можно использовать прямое соединение (порт 5432) — задача одна и
+долгоживущая.
+
+Первый прогон запустите руками: вкладка **Actions → Weekly competitor report →
+Run workflow**. Так вы увидите ошибки сразу, а не через неделю.
+
+## Альтернатива: деплой на VPS
 
 ```bash
 git clone <ваш-репозиторий> /opt/competitor-monitor
@@ -107,17 +154,6 @@ docker compose exec web python -m scripts.create_user you@example.com 'паро�
 > поставьте перед ним nginx/Caddy с TLS, иначе пароль от админки идёт открытым
 > текстом. Вариант с Caddy — одна строка в `Caddyfile`:
 > `monitor.example.com { reverse_proxy localhost:8000 }`
-
-### Сессия Telegram
-
-Telethon при первом входе запрашивает код из Telegram — сделайте это
-интерактивно один раз:
-
-```bash
-docker compose run --rm web python -c "from collectors.telegram import fetch_telegram_posts; print(len(fetch_telegram_posts('@durov', limit=5)))"
-```
-
-Созданный `tg_session.session` подхватится через volume.
 
 ### Еженедельный запуск (cron на хосте)
 
@@ -138,11 +174,15 @@ docker compose run --rm web python -c "from collectors.telegram import fetch_tel
 - админка стартует, вход работает (неверный пароль → 400, верный → 302), все
   8 разделов открываются, CRUD создаёт записи через реальные формы;
 - иерархия Продукт → Конкурент → Источник сохраняется и читается;
-- коллектор App Store: 50 отзывов, рейтинг и даты; пустой стор не падает;
+- коллектор App Store: 50 отзывов, рейтинг и даты; пустой стор и троттлинг со
+  стороны Apple не роняют сбор;
+- коллектор Telegram (`t.me/s`, без ключей): пагинация уходит назад за пределы
+  недельного окна, ID уникальны;
 - коллектор сайтов: RSS (40 и 200 записей) и детект изменений по хэшу;
 - недельный пайплайн: сбор → дедуп (повторный запуск не плодит дубли) →
   снимок → отчёт → отправка в бот продукта;
 - динамика рейтинга: `рейтинг 4.78 (-0.17 за неделю)`;
 - сломанный источник не роняет отчёт, а попадает в него как `⚠️`.
 
-Не проверено вживую (нужны ключи): VK, Telegram, Google Play, DeepSeek.
+Не проверено вживую (нужны ключи): VK, Google Play, DeepSeek, а также сам
+деплой на Vercel и запуск workflow в Actions.

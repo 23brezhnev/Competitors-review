@@ -18,11 +18,11 @@ from pipeline.summarize import summarize_competitor
 WINDOW_DAYS = 7
 
 
-def _collect_posts(source: Source) -> list[dict]:
+def _collect_posts(source: Source, since: datetime) -> list[dict]:
     if source.type == SourceType.vk:
         return vk.fetch_vk_posts(source.identifier)
     if source.type == SourceType.telegram:
-        return telegram.fetch_telegram_posts(source.identifier)
+        return telegram.fetch_telegram_posts(source.identifier, since=since)
     if source.type == SourceType.website:
         return web.fetch_web_posts(source.identifier, source.config)
     return []
@@ -95,7 +95,7 @@ def run() -> None:
                         if source.type in (SourceType.googleplay, SourceType.appstore):
                             review_notes.append(_handle_app_source(db, source))
                         else:
-                            posts = _collect_posts(source)
+                            posts = _collect_posts(source, since)
                             _store_posts(db, source, posts)
                             for p in posts:
                                 pub = p.get("published_at")

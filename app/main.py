@@ -12,8 +12,10 @@ load_dotenv()
 
 SECRET_KEY = os.getenv("SECRET_KEY", "change-me-please")
 
-# Dev convenience: create tables if missing. In prod prefer Alembic migrations.
-Base.metadata.create_all(engine)
+# Local convenience only: on Supabase the schema comes from a migration, and on
+# serverless this would hit the DB on every cold start.
+if not os.getenv("VERCEL") and os.getenv("AUTO_CREATE_TABLES", "1") == "1":
+    Base.metadata.create_all(engine)
 
 app = FastAPI(title="Competitor Monitor")
 

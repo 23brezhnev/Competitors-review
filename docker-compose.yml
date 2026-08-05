@@ -8,6 +8,3 @@ services:
     ports:
       - "8000:8000"
     restart: unless-stopped
-    volumes:
-      # Persist the Telegram session file created on first Telethon login.
-      - ./tg_session.session:/app/tg_session.session
