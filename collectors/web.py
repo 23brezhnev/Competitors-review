@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Website collector — RSS when available, otherwise page change-detection.
 
 For pages without RSS we hash the visible text; a new hash means the page
@@ -20,22 +22,35 @@ def fetch_web_posts(identifier: str, config: dict | None = None) -> list[dict]:
 
 
 def _fetch_rss(url: str) -> list[dict]:
-    feed = feedparser.parse(url)
+    # Fetch ourselves: feedparser's own User-Agent is blocked by many sites,
+    # which would silently yield zero entries.
+    resp = requests.get(url, headers=HEADERS, timeout=30)
+    resp.raise_for_status()
+    feed = feedparser.parse(resp.content)
     posts = []
     for e in feed.entries:
         published = None
         if getattr(e, "published_parsed", None):
             published = datetime(*e.published_parsed[:6], tzinfo=timezone.utc)
+        summary = _strip_html(e.get("summary", ""))
         posts.append(
             {
                 "external_id": e.get("id") or e.get("link") or e.get("title"),
-                "text": f"{e.get('title', '')}\n{e.get('summary', '')}".strip(),
+                "text": f"{e.get('title', '')}\n{summary}".strip(),
                 "published_at": published,
                 "url": e.get("link"),
                 "raw": {},
             }
         )
     return posts
+
+
+def _strip_html(html: str) -> str:
+    """RSS summaries often embed markup; the LLM only needs the prose."""
+    if not html:
+        return ""
+    text = BeautifulSoup(html, "html.parser").get_text(" ")
+    return " ".join(text.split())
 
 
 def _fetch_page_snapshot(url: str) -> list[dict]:

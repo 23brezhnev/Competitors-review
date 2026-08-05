@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Weekly job: collect -> store (dedup) -> summarize (DeepSeek) -> send (Telegram).
 
 Run by cron once a week, e.g.:
@@ -40,10 +42,14 @@ def _store_posts(db, source: Source, posts: list[dict]) -> int:
 
 def _handle_app_source(db, source: Source) -> str:
     """Store snapshot + reviews, return a human note about the weekly dynamics."""
+    cfg = source.config or {}
+    country = cfg.get("country", "ru")
     if source.type == SourceType.googleplay:
-        snapshot, reviews = stores.fetch_googleplay(source.identifier)
+        snapshot, reviews = stores.fetch_googleplay(
+            source.identifier, lang=cfg.get("lang", "ru"), country=country
+        )
     else:
-        snapshot, reviews = stores.fetch_appstore(source.identifier)
+        snapshot, reviews = stores.fetch_appstore(source.identifier, country=country)
 
     prev = db.scalar(
         select(AppSnapshot).where(AppSnapshot.source_id == source.id)

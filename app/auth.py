@@ -1,4 +1,4 @@
-from passlib.context import CryptContext
+import bcrypt
 from sqladmin.authentication import AuthenticationBackend
 from sqlalchemy import select
 from starlette.requests import Request
@@ -6,15 +6,24 @@ from starlette.requests import Request
 from app.db import SessionLocal
 from app.models import User
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# bcrypt only hashes the first 72 bytes; truncate explicitly so long passwords
+# raise no error and behave consistently.
+_MAX_BCRYPT_BYTES = 72
+
+
+def _prepare(plain: str) -> bytes:
+    return plain.encode("utf-8")[:_MAX_BCRYPT_BYTES]
 
 
 def hash_password(plain: str) -> str:
-    return pwd_context.hash(plain)
+    return bcrypt.hashpw(_prepare(plain), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    try:
+        return bcrypt.checkpw(_prepare(plain), hashed.encode("utf-8"))
+    except ValueError:
+        return False
 
 
 class AdminAuth(AuthenticationBackend):

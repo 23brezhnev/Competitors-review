@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Send the report to a Telegram chat via the Bot API."""
 import os
 

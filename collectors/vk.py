@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """VK collector — public group walls via the official API (wall.get)."""
 import os
 from datetime import datetime, timezone

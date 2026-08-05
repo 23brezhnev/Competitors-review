@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Summarization via DeepSeek (OpenAI-compatible API)."""
 import os
 
@@ -16,10 +18,10 @@ SYSTEM_PROMPT = (
 def _get_client() -> OpenAI:
     global _client
     if _client is None:
-        _client = OpenAI(
-            api_key=os.getenv("DEEPSEEK_API_KEY"),
-            base_url="https://api.deepseek.com",
-        )
+        api_key = os.getenv("DEEPSEEK_API_KEY")
+        if not api_key:
+            raise RuntimeError("DEEPSEEK_API_KEY не задан в .env")
+        _client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
     return _client
 
 
