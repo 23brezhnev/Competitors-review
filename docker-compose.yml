@@ -1,0 +1,13 @@
+# Admin/web service. DB is Supabase (managed Postgres) via DATABASE_URL in .env.
+# The weekly job is run by the host's cron calling the same image:
+#   docker compose run --rm web python -m pipeline.run_weekly
+services:
+  web:
+    build: .
+    env_file: .env
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    volumes:
+      # Persist the Telegram session file created on first Telethon login.
+      - ./tg_session.session:/app/tg_session.session

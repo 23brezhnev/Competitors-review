@@ -1,0 +1,11 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+.env
+*.session
+*.session-journal
+tg_session*
+monitor.db
+.git/
+.DS_Store
