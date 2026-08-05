@@ -71,6 +71,26 @@ Cron (по понедельникам в 9:00):
 > (`tg_session.session`). Сделайте это один раз локально, затем скопируйте файл
 > на сервер.
 
+## База данных (Supabase)
+
+Проект `competitor-monitor` создан в регионе `eu-central-1`, схема из 8 таблиц
+уже накатана миграцией `create_competitor_monitor_schema`. RLS включён без
+политик: через публичный API данные недоступны никому, приложение ходит в базу
+напрямую по Postgres-соединению.
+
+`DATABASE_URL` возьмите в дашборде Supabase → **Project Settings → Database →
+Connection string → URI** (пароль базы там же, при необходимости сбросить):
+
+```
+postgresql+psycopg2://postgres.<ref>:<пароль>@<host>:6543/postgres
+```
+
+Обратите внимание: SQLAlchemy требует префикс `postgresql+psycopg2://`, а
+Supabase показывает строку как `postgresql://` — замените начало.
+
+Схема уже существует, поэтому `Base.metadata.create_all()` в `app/main.py`
+ничего не пересоздаёт.
+
 ## Деплой на VPS
 
 ```bash
